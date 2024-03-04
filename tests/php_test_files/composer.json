@@ -1,0 +1,11 @@
+{
+    "name": "roadrunner/sendremotefile-tests",
+    "minimum-stability": "stable",
+    "require": {
+        "nyholm/psr7": "^1.8",
+        "spiral/roadrunner": "^2023.3",
+        "spiral/roadrunner-http": "^3.4",
+        "spiral/roadrunner-worker": "^3.4",
+        "spiral/goridge": "^4.1"
+    }
+}

@@ -91,6 +91,7 @@ func (p *Plugin) Middleware(next http.Handler) http.Handler {
 		rrWriter.Header().Del(xSendRemoteHeader)
 
 		if !strings.HasPrefix(url, "http") {
+			p.log.Error("header value must start with http")
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
 		}
