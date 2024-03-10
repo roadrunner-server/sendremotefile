@@ -19,7 +19,7 @@ while ($req = $psr7->waitRequest()) {
                 break;
 
             case "/remote-file":
-                $resp = new Response(200, ["X-Sendremotefile" => "http://127.0.0.1:18953/file", "Content-Disposition" => "attachment; filename=composer.json"]);
+                $resp = new Response(200, ["X-Sendremotefile" => "http://127.0.0.1:18953/file", "Content-Disposition" => "attachment; filename=1MB.jpg"]);
                 break;
 
             case "/remote-file-not-found":
@@ -31,12 +31,12 @@ while ($req = $psr7->waitRequest()) {
                 break;
             
             case "/file":
-                $resp = new Response(200, ["Content-Type" => "text/plain"], $psr17Factory->createStreamFromFile(__DIR__ . "/composer.json"));
+                $resp = new Response(200, ["Content-Type" => "image/jpeg"], $psr17Factory->createStreamFromFile(__DIR__ . "/../data/1MB.jpg"));
                 break;
             
             case "/file-timeout":
                 usleep(5_500_000);
-                $resp = new Response(200, ["Content-Type" => "text/plain"], $psr17Factory->createStreamFromFile(__DIR__ . "/composer.json"));
+                $resp = new Response(200, ["Content-Type" => "image/jpeg"], $psr17Factory->createStreamFromFile(__DIR__ . "/../data/1MB.jpg"));
                 break;
             
             default:

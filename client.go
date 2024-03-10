@@ -41,7 +41,7 @@ func NewClient(url string, timeout time.Duration) *client {
 }
 
 func (c *client) Request() (*http.Response, error) {
-	req, err := http.NewRequest("GET", c.url, nil)
+	req, err := http.NewRequest(http.MethodGet, c.url, nil)
 	if err != nil {
 		return nil, err
 	}

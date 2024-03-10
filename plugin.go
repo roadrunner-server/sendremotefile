@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	rrErrors "github.com/roadrunner-server/errors"
@@ -15,13 +14,14 @@ import (
 )
 
 const (
-	RootPluginName    string        = "http"
-	PluginName        string        = "sendremotefile"
-	ContentTypeKey    string        = "Content-Type"
-	ContentTypeVal    string        = "application/octet-stream"
-	xSendRemoteHeader string        = "X-Sendremotefile"
-	defaultBufferSize int           = 10 * 1024 * 1024 // 10MB chunks
-	timeout           time.Duration = 5 * time.Second
+	rootPluginName         string        = "http"
+	pluginName             string        = "sendremotefile"
+	responseContentTypeKey string        = "Content-Type"
+	responseContentTypeVal string        = "application/octet-stream"
+	responseStatusCode     int           = http.StatusOK
+	xSendRemoteHeader      string        = "X-Sendremotefile"
+	defaultBufferSize      uint          = TenMB
+	timeout                time.Duration = 5 * time.Second
 )
 
 type Configurer interface {
@@ -35,36 +35,29 @@ type Logger interface {
 
 type Plugin struct {
 	log         *zap.Logger
-	writersPool sync.Pool
+	bytesPool   *bpool
+	writersPool *wpool
 }
 
 func (p *Plugin) Init(cfg Configurer, log Logger) error {
 	const op = rrErrors.Op("sendremotefile_plugin_init")
 
-	if !cfg.Has(RootPluginName) {
+	if !cfg.Has(rootPluginName) {
 		return rrErrors.E(op, rrErrors.Disabled)
 	}
 
-	p.log = log.NamedLogger(PluginName)
-
-	p.writersPool = sync.Pool{
-		New: func() any {
-			wr := new(writer)
-			wr.code = http.StatusOK
-			wr.data = make([]byte, 0, 10)
-			wr.hdrToSend = make(map[string][]string, 2)
-			return wr
-		},
-	}
+	p.log = log.NamedLogger(pluginName)
+	p.bytesPool = NewBytePool()
+	p.writersPool = NewWriterPool()
 
 	return nil
 }
 
 func (p *Plugin) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rrWriter := p.getWriter()
+		rrWriter := p.writersPool.get()
 		defer func() {
-			p.putWriter(rrWriter)
+			p.writersPool.put(rrWriter)
 			_ = r.Body.Close()
 		}()
 
@@ -73,9 +66,10 @@ func (p *Plugin) Middleware(next http.Handler) http.Handler {
 		// if there is no X-Sendremotefile header from the PHP worker, just return
 		if url := rrWriter.Header().Get(xSendRemoteHeader); url == "" {
 			// re-add original headers, status code and body
-			maps.Copy(w.Header(), rrWriter.hdrToSend)
+			maps.Copy(w.Header(), rrWriter.Header())
 			w.WriteHeader(rrWriter.code)
 			if len(rrWriter.data) > 0 {
+				// write a body if exists
 				_, err := w.Write(rrWriter.data)
 				if err != nil {
 					p.log.Error("failed to write data to the response", zap.Error(err))
@@ -110,37 +104,38 @@ func (p *Plugin) Middleware(next http.Handler) http.Handler {
 		}
 
 		defer func() {
-			_ = resp.Body.Close()
+			err = resp.Body.Close()
+			if err != nil {
+				p.log.Error("failed to close upstream response body", zap.Error(err))
+			}
 		}()
 
 		if resp.StatusCode != http.StatusOK {
-			p.log.Error("invalid upstream response status code", zap.Int("status_code", resp.StatusCode))
+			p.log.Error("invalid upstream response status code", zap.Int("rr_response_code", rrWriter.code), zap.Int("remotefile_response_code", resp.StatusCode))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
 
-		var buf []byte
-		// do not allocate large buffer for the small files
-		if size := resp.ContentLength; size > 0 && size < int64(defaultBufferSize) {
-			// allocate based on provided content length
-			buf = make([]byte, size)
-		} else {
-			// allocate default buffer
-			buf = make([]byte, defaultBufferSize)
+		var pl = defaultBufferSize
+		if cl := resp.ContentLength; cl > 0 {
+			pl = uint(cl)
 		}
 
+		pb := p.bytesPool.get(pl)
+
 		// re-add original headers
-		maps.Copy(w.Header(), rrWriter.hdrToSend)
+		maps.Copy(w.Header(), rrWriter.Header())
 		// overwrite content-type header
-		w.Header().Set(ContentTypeKey, ContentTypeVal)
+		w.Header().Set(responseContentTypeKey, responseContentTypeVal)
+		w.WriteHeader(responseStatusCode)
 
 		rc := http.NewResponseController(w)
 
 		for {
-			nr, er := resp.Body.Read(buf)
+			nr, er := resp.Body.Read(*pb)
 
 			if nr > 0 {
-				nw, ew := w.Write(buf[0:nr])
+				nw, ew := w.Write((*pb)[:nr])
 
 				if nw > 0 {
 					if ef := rc.Flush(); ef != nil {
@@ -164,25 +159,12 @@ func (p *Plugin) Middleware(next http.Handler) http.Handler {
 				break
 			}
 		}
+
+		p.bytesPool.put(pl, pb)
 	})
 }
 
 // Middleware/plugin name.
 func (p *Plugin) Name() string {
-	return PluginName
-}
-
-func (p *Plugin) getWriter() *writer {
-	return p.writersPool.Get().(*writer)
-}
-
-func (p *Plugin) putWriter(w *writer) {
-	w.code = http.StatusOK
-	w.data = make([]byte, 0, 10)
-
-	for k := range w.hdrToSend {
-		delete(w.hdrToSend, k)
-	}
-
-	p.writersPool.Put(w)
+	return pluginName
 }

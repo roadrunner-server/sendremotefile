@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -29,7 +28,7 @@ func TestSendremotefileInit(t *testing.T) {
 	cont := endure.New(slog.LevelDebug)
 
 	cfg := &config.Plugin{
-		Version: "2.9.0",
+		Version: "2023.3.0",
 		Path:    "configs/.rr-with-sendremotefile.yaml",
 		Prefix:  "rr",
 	}
@@ -44,9 +43,7 @@ func TestSendremotefileInit(t *testing.T) {
 	assert.NoError(t, err)
 
 	err = cont.Init()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	ch, err := cont.Serve()
 	assert.NoError(t, err)
@@ -95,7 +92,7 @@ func TestSendremotefileDisabled(t *testing.T) {
 	cont := endure.New(slog.LevelDebug)
 
 	cfg := &config.Plugin{
-		Version: "2.9.0",
+		Version: "2023.3.0",
 		Path:    "configs/.rr-with-disabled-sendremotefile.yaml",
 		Prefix:  "rr",
 	}
@@ -110,9 +107,7 @@ func TestSendremotefileDisabled(t *testing.T) {
 	assert.NoError(t, err)
 
 	err = cont.Init()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	ch, err := cont.Serve()
 	assert.NoError(t, err)
@@ -174,7 +169,7 @@ func TestSendremotefileFileStream(t *testing.T) {
 	cont := endure.New(slog.LevelDebug)
 
 	cfg := &config.Plugin{
-		Version: "2.9.0",
+		Version: "2023.3.0",
 		Path:    "configs/.rr-with-sendremotefile.yaml",
 		Prefix:  "rr",
 	}
@@ -191,9 +186,7 @@ func TestSendremotefileFileStream(t *testing.T) {
 	assert.NoError(t, err)
 
 	err = cont.Init()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	ch, err := cont.Serve()
 	assert.NoError(t, err)
@@ -250,10 +243,16 @@ func remoteFileCheck(t *testing.T) {
 	b, err := io.ReadAll(r.Body)
 	require.NoError(t, err)
 
-	assert.True(t, strings.Contains(string(b), "roadrunner/sendremotefile-tests"))
+	file, err := os.Open("./data/1MB.jpg")
+	require.NoError(t, err)
+	defer file.Close()
+	fs, err := file.Stat()
+	require.NoError(t, err)
+
+	assert.Equal(t, int(fs.Size()), len(b))
 	assert.Equal(t, 200, r.StatusCode)
 	assert.Equal(t, "", r.Header.Get("X-Sendremotefile"))
-	assert.Equal(t, "attachment; filename=composer.json", r.Header.Get("Content-Disposition"))
+	assert.Equal(t, "attachment; filename=1MB.jpg", r.Header.Get("Content-Disposition"))
 	assert.Equal(t, "application/octet-stream", r.Header.Get("Content-Type"))
 
 	err = r.Body.Close()
