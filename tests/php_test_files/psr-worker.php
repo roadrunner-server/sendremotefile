@@ -39,6 +39,10 @@ while ($req = $psr7->waitRequest()) {
                 $resp = new Response(200, ["Content-Type" => "image/jpeg"], $psr17Factory->createStreamFromFile(__DIR__ . "/../data/1MB.jpg"));
                 break;
             
+            case "/minio-file":
+                $resp = new Response(200, ["X-Sendremotefile" => "http://127.0.0.1:26379/bucket/fs-data/1MB.jpg"]);
+                break;
+            
             default:
                 $resp = new Response(404);
                 break;

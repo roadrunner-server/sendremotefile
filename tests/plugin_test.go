@@ -263,6 +263,7 @@ func localFileCheck(oLogger *mocklogger.ObservedLogs) func(t *testing.T) {
 	return func(t *testing.T) {
 		r, err := http.DefaultClient.Get("http://127.0.0.1:18953/local-file")
 		require.NoError(t, err)
+		defer r.Body.Close()
 
 		assert.Equal(t, 404, r.StatusCode)
 		assert.Equal(t, "", r.Header.Get("X-Sendremotefile"))
@@ -277,6 +278,7 @@ func remoteFileNotFoundCheck(oLogger *mocklogger.ObservedLogs) func(t *testing.T
 	return func(t *testing.T) {
 		r, err := http.DefaultClient.Get("http://127.0.0.1:18953/remote-file-not-found")
 		require.NoError(t, err)
+		defer r.Body.Close()
 
 		assert.Equal(t, 400, r.StatusCode)
 		assert.Equal(t, "", r.Header.Get("X-Sendremotefile"))
