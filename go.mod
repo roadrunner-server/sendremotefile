@@ -3,7 +3,7 @@ module github.com/roadrunner-server/sendremotefile/v4
 go 1.22.2
 
 require (
-	github.com/roadrunner-server/errors v1.4.0
+	github.com/roadrunner-server/errors v1.4.1
 	go.uber.org/zap v1.27.0
 )
 
